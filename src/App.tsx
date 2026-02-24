@@ -16,10 +16,14 @@ import {
   Info,
   ChevronRight,
   Gamepad2,
-  Skull
+  Skull,
+  Sword,
+  Activity,
+  ShieldAlert,
+  Wind
 } from 'lucide-react';
 import GameCanvas from './components/GameCanvas';
-import { GameState, GameStats, Achievement } from './types';
+import { GameState, GameStats, Achievement, UpgradeType } from './types';
 import { PLAYER_INITIAL_HEALTH } from './constants';
 
 export default function App() {
@@ -31,9 +35,12 @@ export default function App() {
     itemsCollected: 0,
     timeSurvived: 0,
     damageTaken: 0,
+    currentHealth: PLAYER_INITIAL_HEALTH,
+    maxHealth: PLAYER_INITIAL_HEALTH,
   });
   const [finalAchievements, setFinalAchievements] = useState<Achievement[]>([]);
   const [notifications, setNotifications] = useState<string[]>([]);
+  const [appliedUpgrade, setAppliedUpgrade] = useState<UpgradeType | undefined>(undefined);
 
   const addNotification = useCallback((msg: string) => {
     setNotifications(prev => [...prev, msg]);
@@ -51,6 +58,8 @@ export default function App() {
       itemsCollected: 0,
       timeSurvived: 0,
       damageTaken: 0,
+      currentHealth: PLAYER_INITIAL_HEALTH,
+      maxHealth: PLAYER_INITIAL_HEALTH,
     });
   };
 
@@ -62,7 +71,16 @@ export default function App() {
 
   const handleLevelUp = useCallback((level: number) => {
     addNotification(`关卡升级: LEVEL ${level}`);
+    setGameState(GameState.UPGRADING);
   }, [addNotification]);
+
+  const handleUpgradeSelect = (type: UpgradeType) => {
+    setAppliedUpgrade(type);
+    setGameState(GameState.PLAYING);
+    // Reset appliedUpgrade after a short delay so GameCanvas can detect the change if needed, 
+    // but actually we'll handle it via state transition.
+    setTimeout(() => setAppliedUpgrade(undefined), 100);
+  };
 
   const handleAchievementUnlock = useCallback((ach: Achievement) => {
     addNotification(`成就解锁: ${ach.title}`);
@@ -144,10 +162,10 @@ export default function App() {
       </aside>
 
       {/* Main Game Area */}
-      <main className="flex-1 relative flex items-center justify-center p-4 md:p-8">
+      <main className="flex-1 relative flex items-center justify-center p-2 md:p-8 overflow-hidden">
         
         {/* Game Container */}
-        <div className="relative aspect-[8/9] w-full max-w-[600px] bg-slate-900 rounded-2xl shadow-2xl shadow-cyan-500/10 border border-white/10 overflow-hidden">
+        <div className="relative aspect-[8/9] w-full max-h-[90vh] max-w-[min(600px,95vw)] bg-slate-900 rounded-2xl shadow-2xl shadow-cyan-500/10 border border-white/10 overflow-hidden">
           
           {/* Canvas Component */}
           <GameCanvas 
@@ -156,6 +174,7 @@ export default function App() {
             onStatsUpdate={setStats}
             onAchievementUnlock={handleAchievementUnlock}
             onLevelUp={handleLevelUp}
+            appliedUpgrade={appliedUpgrade}
           />
 
           {/* HUD Overlay */}
@@ -173,11 +192,11 @@ export default function App() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  {Array.from({ length: PLAYER_INITIAL_HEALTH }).map((_, i) => (
+                  {Array.from({ length: stats.maxHealth }).map((_, i) => (
                     <Heart 
                       key={i} 
                       size={16} 
-                      className={i < (PLAYER_INITIAL_HEALTH - stats.damageTaken) ? "text-red-500 fill-red-500" : "text-slate-700"} 
+                      className={i < stats.currentHealth ? "text-red-500 fill-red-500" : "text-slate-700"} 
                     />
                   ))}
                 </div>
@@ -191,6 +210,83 @@ export default function App() {
               </button>
             </div>
           )}
+
+          {/* Upgrade Screen */}
+          <AnimatePresence>
+            {gameState === GameState.UPGRADING && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="absolute inset-0 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-8 text-center z-50"
+              >
+                <div className="max-w-md w-full space-y-8">
+                  <div className="space-y-2">
+                    <h2 className="text-3xl font-black italic tracking-tighter text-cyan-400">火力升级</h2>
+                    <p className="text-slate-400 text-sm">选择一项能力进行强化</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <button 
+                      onClick={() => handleUpgradeSelect(UpgradeType.FIRE_RATE)}
+                      className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all group text-left"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center text-cyan-400 group-hover:scale-110 transition-transform">
+                        <Zap size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-white">提升射速</p>
+                        <p className="text-xs text-slate-400">减少发射间隔，让火力更密集</p>
+                      </div>
+                      <ChevronRight size={20} className="text-slate-600 group-hover:text-cyan-400" />
+                    </button>
+
+                    <button 
+                      onClick={() => handleUpgradeSelect(UpgradeType.DAMAGE)}
+                      className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-red-500/10 hover:border-red-500/50 transition-all group text-left"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-red-500/20 flex items-center justify-center text-red-400 group-hover:scale-110 transition-transform">
+                        <Sword size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-white">提升伤害</p>
+                        <p className="text-xs text-slate-400">增加子弹威力，更快击毁敌机</p>
+                      </div>
+                      <ChevronRight size={20} className="text-slate-600 group-hover:text-red-400" />
+                    </button>
+
+                    <button 
+                      onClick={() => handleUpgradeSelect(UpgradeType.DEFENSE)}
+                      className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all group text-left"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-110 transition-transform">
+                        <ShieldAlert size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-white">强化防御</p>
+                        <p className="text-xs text-slate-400">增加生命上限并恢复一点生命</p>
+                      </div>
+                      <ChevronRight size={20} className="text-slate-600 group-hover:text-emerald-400" />
+                    </button>
+
+                    <button 
+                      onClick={() => handleUpgradeSelect(UpgradeType.MOVE_SPEED)}
+                      className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-amber-500/10 hover:border-amber-500/50 transition-all group text-left"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
+                        <Wind size={24} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-bold text-white">提升航行速度</p>
+                        <p className="text-xs text-slate-400">增加飞机的移动速度，更灵活地躲避攻击</p>
+                      </div>
+                      <ChevronRight size={20} className="text-slate-600 group-hover:text-amber-400" />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Start Screen */}
           <AnimatePresence>
@@ -217,26 +313,32 @@ export default function App() {
                     在浩瀚的宇宙中，你是最后的防线。击退敌机，收集能量，成为真正的星际传奇。
                   </p>
 
-                  <button 
-                    onClick={handleStart}
-                    className="group relative px-8 py-4 bg-cyan-500 text-slate-950 font-bold rounded-full overflow-hidden transition-transform hover:scale-105 active:scale-95"
-                  >
-                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform" />
-                    <span className="relative flex items-center gap-2">
-                      开始航行 <ChevronRight size={20} />
-                    </span>
-                  </button>
+                  <div className="space-y-4">
+                    <button 
+                      onClick={handleStart}
+                      className="group relative w-full px-8 py-4 bg-cyan-500 text-slate-950 font-bold rounded-full overflow-hidden transition-transform hover:scale-105 active:scale-95"
+                    >
+                      <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform" />
+                      <span className="relative flex items-center justify-center gap-2">
+                        开始航行 <ChevronRight size={20} />
+                      </span>
+                    </button>
 
-                  <div className="lg:hidden grid grid-cols-2 gap-4 pt-8">
-                    <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-left">
-                      <Gamepad2 size={16} className="text-cyan-400 mb-2" />
-                      <p className="text-[10px] font-bold uppercase text-slate-500">操作</p>
-                      <p className="text-xs">拖动或点击屏幕移动并射击</p>
-                    </div>
-                    <div className="p-3 rounded-xl bg-white/5 border border-white/10 text-left">
-                      <Zap size={16} className="text-yellow-400 mb-2" />
-                      <p className="text-[10px] font-bold uppercase text-slate-500">道具</p>
-                      <p className="text-xs">收集黄色和绿色方块</p>
+                    <div className="grid grid-cols-1 gap-2 text-left">
+                      <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+                        <Gamepad2 size={16} className="text-cyan-400 shrink-0" />
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-slate-500">操作说明</p>
+                          <p className="text-xs text-slate-300">WASD/方向键移动，空格射击；或在屏幕上拖动</p>
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-white/5 border border-white/10 flex items-center gap-3">
+                        <Zap size={16} className="text-yellow-400 shrink-0" />
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-slate-500">道具说明</p>
+                          <p className="text-xs text-slate-300">黄色：三向子弹；绿色：能量护盾</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>

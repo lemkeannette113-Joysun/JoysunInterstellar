@@ -18,17 +18,24 @@ export const ENEMY_CONFIGS = {
   },
   FAST: {
     speed: 4,
-    health: 1,
+    health: 2,
     score: 150,
     size: 25,
     color: '#f59e0b', // amber-500
   },
   HEAVY: {
     speed: 1.5,
-    health: 3,
+    health: 10,
     score: 300,
     size: 45,
     color: '#ef4444', // red-500
+  },
+  SHOOTER: {
+    speed: 1.2, // Slow speed
+    health: 2,
+    score: 500,
+    size: 40,
+    color: '#f87171', // red-400
   },
 };
 

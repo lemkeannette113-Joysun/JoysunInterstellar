@@ -17,7 +17,8 @@ import {
   EnemyType, 
   ItemType, 
   GameStats,
-  Achievement
+  Achievement,
+  UpgradeType
 } from '../types';
 
 // --- Game Entities ---
@@ -27,6 +28,9 @@ const ASSETS = {
   enemyBasic: '/assets/enemy_basic.png',
   enemyFast: '/assets/enemy_fast.png',
   enemyHeavy: '/assets/enemy_heavy.png',
+  shootSound: '/assets/shoot.mp3',
+  explosionSound: '/assets/explosion.mp3',
+  bgMusic: '/assets/background_music.mp3',
 };
 
 class Particle {
@@ -73,13 +77,17 @@ class Bullet {
   vx: number;
   vy: number;
   color: string;
+  damage: number;
+  isEnemy: boolean;
 
-  constructor(x: number, y: number, vx: number, vy: number, color: string = '#00f2ff') {
+  constructor(x: number, y: number, vx: number, vy: number, color: string = '#00f2ff', damage: number = 1, isEnemy: boolean = false) {
     this.x = x;
     this.y = y;
     this.vx = vx;
     this.vy = vy;
     this.color = color;
+    this.damage = damage;
+    this.isEnemy = isEnemy;
   }
 
   update() {
@@ -104,16 +112,20 @@ class Enemy {
   y: number;
   type: EnemyType;
   health: number;
+  maxHealth: number;
   speed: number;
   size: number;
   color: string;
+  lastShotTime: number = 0;
 
   constructor(x: number, y: number, type: EnemyType, level: number) {
     const config = ENEMY_CONFIGS[type];
     this.x = x;
     this.y = y;
     this.type = type;
-    this.health = config.health + Math.floor(level / 3);
+    // Health scales with level: base + (level - 1)
+    this.maxHealth = config.health + (level - 1);
+    this.health = this.maxHealth;
     this.speed = config.speed + (level * 0.1);
     this.size = config.size;
     this.color = config.color;
@@ -125,6 +137,23 @@ class Enemy {
 
   draw(ctx: CanvasRenderingContext2D, image?: HTMLImageElement | null) {
     ctx.save();
+    
+    // Draw health bar for enemies with more than 1 HP
+    if (this.maxHealth > 1) {
+      const barWidth = this.size;
+      const barHeight = 4;
+      const healthPercent = this.health / this.maxHealth;
+      
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(this.x - barWidth / 2, this.y - this.size / 2 - 10, barWidth, barHeight);
+      
+      // Color based on health percentage
+      if (healthPercent > 0.6) ctx.fillStyle = '#22c55e'; // green
+      else if (healthPercent > 0.3) ctx.fillStyle = '#f59e0b'; // amber
+      else ctx.fillStyle = '#ef4444'; // red
+      
+      ctx.fillRect(this.x - barWidth / 2, this.y - this.size / 2 - 10, barWidth * healthPercent, barHeight);
+    }
     
     if (image && image.complete && image.naturalWidth !== 0) {
       // Draw image if available
@@ -154,6 +183,23 @@ class Enemy {
       ctx.fill();
     }
     
+    // Health bar for tougher enemies
+    if (this.maxHealth > 1) {
+      const barWidth = this.size;
+      const barHeight = 4;
+      const healthPercent = this.health / this.maxHealth;
+      
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(this.x - barWidth / 2, this.y - this.size / 2 - 10, barWidth, barHeight);
+      
+      // Color based on health percentage
+      if (healthPercent > 0.6) ctx.fillStyle = '#22c55e'; // green
+      else if (healthPercent > 0.3) ctx.fillStyle = '#f59e0b'; // amber
+      else ctx.fillStyle = '#ef4444'; // red
+      
+      ctx.fillRect(this.x - barWidth / 2, this.y - this.size / 2 - 10, barWidth * healthPercent, barHeight);
+    }
+    
     ctx.restore();
   }
 }
@@ -177,7 +223,11 @@ class Item {
 
   draw(ctx: CanvasRenderingContext2D) {
     ctx.save();
-    const color = this.type === ItemType.TRIPLE_SHOT ? '#facc15' : '#22c55e';
+    let color = '#facc15'; // Default yellow
+    if (this.type === ItemType.TRIPLE_SHOT) color = '#facc15';
+    if (this.type === ItemType.SHIELD) color = '#22c55e';
+    if (this.type === ItemType.MEDKIT) color = '#ef4444';
+
     ctx.shadowBlur = 15;
     ctx.shadowColor = color;
     ctx.strokeStyle = color;
@@ -193,9 +243,13 @@ class Item {
     ctx.stroke();
     
     ctx.fillStyle = color;
-    ctx.font = '12px Arial';
+    ctx.font = 'bold 12px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(this.type === ItemType.TRIPLE_SHOT ? '3' : 'S', this.x, this.y + 4);
+    let text = 'P';
+    if (this.type === ItemType.TRIPLE_SHOT) text = '3';
+    if (this.type === ItemType.SHIELD) text = 'S';
+    if (this.type === ItemType.MEDKIT) text = 'H';
+    ctx.fillText(text, this.x, this.y + 4);
     
     ctx.restore();
   }
@@ -206,16 +260,23 @@ class Star {
   y: number;
   size: number;
   speed: number;
+  color: string;
+  twinkle: number;
 
   constructor() {
     this.x = Math.random() * GAME_WIDTH;
     this.y = Math.random() * GAME_HEIGHT;
-    this.size = Math.random() * 2;
-    this.speed = Math.random() * 3 + 1;
+    this.size = Math.random() * 2 + 0.5;
+    this.speed = Math.random() * 2 + 0.5;
+    
+    const colors = ['#ffffff', '#fff7ed', '#fefce8', '#ecfeff', '#f5f3ff'];
+    this.color = colors[Math.floor(Math.random() * colors.length)];
+    this.twinkle = Math.random() * Math.PI * 2;
   }
 
   update() {
     this.y += this.speed;
+    this.twinkle += 0.05;
     if (this.y > GAME_HEIGHT) {
       this.y = 0;
       this.x = Math.random() * GAME_WIDTH;
@@ -223,10 +284,14 @@ class Star {
   }
 
   draw(ctx: CanvasRenderingContext2D) {
-    ctx.fillStyle = 'white';
+    const opacity = 0.3 + Math.sin(this.twinkle) * 0.3;
+    ctx.save();
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = opacity;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -238,6 +303,7 @@ interface GameCanvasProps {
   onStatsUpdate: (stats: GameStats) => void;
   onAchievementUnlock: (achievement: Achievement) => void;
   onLevelUp: (level: number) => void;
+  appliedUpgrade?: UpgradeType;
 }
 
 export default function GameCanvas({ 
@@ -245,7 +311,8 @@ export default function GameCanvas({
   onGameOver, 
   onStatsUpdate,
   onAchievementUnlock,
-  onLevelUp
+  onLevelUp,
+  appliedUpgrade
 }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
@@ -257,17 +324,27 @@ export default function GameCanvas({
     itemsCollected: 0,
     timeSurvived: 0,
     damageTaken: 0,
+    currentHealth: PLAYER_INITIAL_HEALTH,
+    maxHealth: PLAYER_INITIAL_HEALTH,
   });
   
   const achievementsRef = useRef<Achievement[]>(ACHIEVEMENTS_LIST.map(a => ({ ...a })));
   const playerPos = useRef({ x: GAME_WIDTH / 2, y: GAME_HEIGHT - 100 });
   const playerHealth = useRef(PLAYER_INITIAL_HEALTH);
+  const maxHealth = useRef(PLAYER_INITIAL_HEALTH);
   const isInvincible = useRef(false);
   const tripleShotUntil = useRef(0);
   const hasShield = useRef(false);
   const keysPressed = useRef<Set<string>>(new Set());
   const isPointerDown = useRef(false);
   const pointerPos = useRef({ x: 0, y: 0 });
+  
+  const upgradeStats = useRef({
+    fireRateBonus: 0,
+    damageBonus: 0,
+    defenseBonus: 0,
+    moveSpeedBonus: 0,
+  });
   
   const bullets = useRef<Bullet[]>([]);
   const enemies = useRef<Enemy[]>([]);
@@ -280,19 +357,127 @@ export default function GameCanvas({
   const lastItemSpawn = useRef(0);
   const lastTimeTick = useRef(0);
 
-  // Asset Loading
-  const images = useRef<{ [key: string]: HTMLImageElement }>({});
   useEffect(() => {
+    if (appliedUpgrade) {
+      if (appliedUpgrade === UpgradeType.FIRE_RATE) {
+        upgradeStats.current.fireRateBonus += 25; // 25ms reduction
+      } else if (appliedUpgrade === UpgradeType.DAMAGE) {
+        upgradeStats.current.damageBonus += 1;
+      } else if (appliedUpgrade === UpgradeType.DEFENSE) {
+        maxHealth.current += 1;
+        playerHealth.current = Math.min(playerHealth.current + 1, maxHealth.current);
+      } else if (appliedUpgrade === UpgradeType.MOVE_SPEED) {
+        upgradeStats.current.moveSpeedBonus += 1.5;
+      }
+      statsRef.current.maxHealth = maxHealth.current;
+      statsRef.current.currentHealth = playerHealth.current;
+      onStatsUpdate({ ...statsRef.current });
+    }
+  }, [appliedUpgrade]);
+
+  // Asset Loading
+  const [assetsLoaded, setAssetsLoaded] = useState(false);
+  const images = useRef<{ [key: string]: HTMLImageElement }>({});
+  const sounds = useRef<{ [key: string]: HTMLAudioElement }>({});
+
+  useEffect(() => {
+    let loadedCount = 0;
+    const totalAssets = Object.keys(ASSETS).length;
+
+    const checkLoaded = () => {
+      loadedCount++;
+      if (loadedCount === totalAssets) {
+        setAssetsLoaded(true);
+      }
+    };
+
     Object.entries(ASSETS).forEach(([key, src]) => {
-      const img = new Image();
-      img.src = src;
-      images.current[key] = img;
+      if (src.endsWith('.png')) {
+        const img = new Image();
+        img.onload = checkLoaded;
+        img.onerror = () => {
+          console.warn(`Failed to load image: ${src}`);
+          checkLoaded();
+        };
+        img.src = src;
+        images.current[key] = img;
+      } else if (src.endsWith('.mp3')) {
+        const audio = new Audio();
+        const onAudioLoad = () => {
+          audio.removeEventListener('canplay', onAudioLoad);
+          audio.removeEventListener('canplaythrough', onAudioLoad);
+          checkLoaded();
+        };
+        audio.addEventListener('canplay', onAudioLoad);
+        audio.addEventListener('canplaythrough', onAudioLoad);
+        audio.onerror = () => {
+          console.warn(`Failed to load audio: ${src}`);
+          onAudioLoad();
+        };
+        audio.preload = 'auto';
+        audio.src = src;
+        if (key === 'bgMusic') {
+          audio.loop = true;
+          audio.volume = 0.4; // Increased volume slightly
+        }
+        audio.load();
+        sounds.current[key] = audio;
+      }
     });
   }, []);
 
-  // Reset game when transitioning to PLAYING
+  // Manage background music
   useEffect(() => {
-    if (gameState === GameState.PLAYING) {
+    if (!assetsLoaded) return;
+    const music = sounds.current['bgMusic'];
+    if (!music) return;
+
+    const playMusic = () => {
+      if (gameState === GameState.PLAYING) {
+        music.play().catch(() => {
+          // Autoplay block - will retry on next interaction
+        });
+      } else {
+        music.pause();
+        music.currentTime = 0;
+      }
+    };
+
+    playMusic();
+
+    // Add global interaction listener to ensure music plays
+    const handleInteraction = () => {
+      if (gameState === GameState.PLAYING && music.paused) {
+        music.play().catch(() => {});
+      }
+    };
+
+    window.addEventListener('mousedown', handleInteraction);
+    window.addEventListener('keydown', handleInteraction);
+    window.addEventListener('touchstart', handleInteraction);
+
+    return () => {
+      window.removeEventListener('mousedown', handleInteraction);
+      window.removeEventListener('keydown', handleInteraction);
+      window.removeEventListener('touchstart', handleInteraction);
+    };
+  }, [gameState, assetsLoaded]);
+
+  const playSound = (key: string) => {
+    const sound = sounds.current[key];
+    if (sound) {
+      const clone = sound.cloneNode() as HTMLAudioElement;
+      clone.volume = 0.3;
+      clone.play().catch(() => {
+        // Ignore errors if audio can't play (e.g. user hasn't interacted yet)
+      });
+    }
+  };
+
+  // Reset game when transitioning to PLAYING from START
+  const prevGameState = useRef<GameState>(gameState);
+  useEffect(() => {
+    if (gameState === GameState.PLAYING && (prevGameState.current === GameState.START || prevGameState.current === GameState.GAMEOVER)) {
       statsRef.current = {
         score: 0,
         level: 1,
@@ -300,9 +485,12 @@ export default function GameCanvas({
         itemsCollected: 0,
         timeSurvived: 0,
         damageTaken: 0,
+        currentHealth: PLAYER_INITIAL_HEALTH,
+        maxHealth: PLAYER_INITIAL_HEALTH,
       };
       playerPos.current = { x: GAME_WIDTH / 2, y: GAME_HEIGHT - 100 };
       playerHealth.current = PLAYER_INITIAL_HEALTH;
+      maxHealth.current = PLAYER_INITIAL_HEALTH;
       isInvincible.current = false;
       tripleShotUntil.current = 0;
       hasShield.current = false;
@@ -314,7 +502,14 @@ export default function GameCanvas({
       lastEnemySpawn.current = 0;
       lastItemSpawn.current = 0;
       lastTimeTick.current = performance.now();
+      upgradeStats.current = {
+        fireRateBonus: 0,
+        damageBonus: 0,
+        defenseBonus: 0,
+        moveSpeedBonus: 0,
+      };
     }
+    prevGameState.current = gameState;
   }, [gameState]);
 
   // Handle Input
@@ -407,10 +602,11 @@ export default function GameCanvas({
       }
 
       // Player Movement
-      if (keysPressed.current.has('ArrowLeft') || keysPressed.current.has('KeyA')) playerPos.current.x -= PLAYER_SPEED;
-      if (keysPressed.current.has('ArrowRight') || keysPressed.current.has('KeyD')) playerPos.current.x += PLAYER_SPEED;
-      if (keysPressed.current.has('ArrowUp') || keysPressed.current.has('KeyW')) playerPos.current.y -= PLAYER_SPEED;
-      if (keysPressed.current.has('ArrowDown') || keysPressed.current.has('KeyS')) playerPos.current.y += PLAYER_SPEED;
+      const currentSpeed = PLAYER_SPEED + upgradeStats.current.moveSpeedBonus;
+      if (keysPressed.current.has('ArrowLeft') || keysPressed.current.has('KeyA')) playerPos.current.x -= currentSpeed;
+      if (keysPressed.current.has('ArrowRight') || keysPressed.current.has('KeyD')) playerPos.current.x += currentSpeed;
+      if (keysPressed.current.has('ArrowUp') || keysPressed.current.has('KeyW')) playerPos.current.y -= currentSpeed;
+      if (keysPressed.current.has('ArrowDown') || keysPressed.current.has('KeyS')) playerPos.current.y += currentSpeed;
 
       // Pointer Movement
       if (isPointerDown.current) {
@@ -418,8 +614,8 @@ export default function GameCanvas({
         const dy = pointerPos.current.y - playerPos.current.y;
         const dist = Math.hypot(dx, dy);
         if (dist > 5) {
-          playerPos.current.x += (dx / dist) * PLAYER_SPEED;
-          playerPos.current.y += (dy / dist) * PLAYER_SPEED;
+          playerPos.current.x += (dx / dist) * currentSpeed;
+          playerPos.current.y += (dy / dist) * currentSpeed;
         }
       }
 
@@ -429,14 +625,17 @@ export default function GameCanvas({
 
       // Shooting
       const shouldShoot = keysPressed.current.has('Space') || isPointerDown.current;
-      if (shouldShoot && time - lastShotTime.current > 150) {
+      const shotInterval = Math.max(80, 150 - upgradeStats.current.fireRateBonus);
+      if (shouldShoot && time - lastShotTime.current > shotInterval) {
+        playSound('shootSound');
         const isTriple = time < tripleShotUntil.current;
+        const damage = 1 + upgradeStats.current.damageBonus;
         if (isTriple) {
-          bullets.current.push(new Bullet(playerPos.current.x, playerPos.current.y - 20, 0, -BULLET_SPEED));
-          bullets.current.push(new Bullet(playerPos.current.x - 10, playerPos.current.y - 15, -2, -BULLET_SPEED));
-          bullets.current.push(new Bullet(playerPos.current.x + 10, playerPos.current.y - 15, 2, -BULLET_SPEED));
+          bullets.current.push(new Bullet(playerPos.current.x, playerPos.current.y - 20, 0, -BULLET_SPEED, '#00f2ff', damage));
+          bullets.current.push(new Bullet(playerPos.current.x - 10, playerPos.current.y - 15, -2, -BULLET_SPEED, '#00f2ff', damage));
+          bullets.current.push(new Bullet(playerPos.current.x + 10, playerPos.current.y - 15, 2, -BULLET_SPEED, '#00f2ff', damage));
         } else {
-          bullets.current.push(new Bullet(playerPos.current.x, playerPos.current.y - 20, 0, -BULLET_SPEED));
+          bullets.current.push(new Bullet(playerPos.current.x, playerPos.current.y - 20, 0, -BULLET_SPEED, '#00f2ff', damage));
         }
         lastShotTime.current = time;
       }
@@ -446,6 +645,7 @@ export default function GameCanvas({
       if (time - lastEnemySpawn.current > spawnInterval) {
         const types = [EnemyType.BASIC, EnemyType.BASIC, EnemyType.FAST];
         if (statsRef.current.level >= 3) types.push(EnemyType.HEAVY);
+        if (statsRef.current.level >= 5) types.push(EnemyType.SHOOTER);
         const type = types[Math.floor(Math.random() * types.length)];
         enemies.current.push(new Enemy(Math.random() * (GAME_WIDTH - 40) + 20, -50, type, statsRef.current.level));
         lastEnemySpawn.current = time;
@@ -453,7 +653,11 @@ export default function GameCanvas({
 
       // Spawning Items
       if (time - lastItemSpawn.current > 15000) {
-        const type = Math.random() > 0.5 ? ItemType.TRIPLE_SHOT : ItemType.SHIELD;
+        const rand = Math.random();
+        let type = ItemType.TRIPLE_SHOT;
+        if (rand > 0.66) type = ItemType.SHIELD;
+        else if (rand > 0.33) type = ItemType.MEDKIT;
+        
         items.current.push(new Item(Math.random() * (GAME_WIDTH - 40) + 20, -50, type));
         lastItemSpawn.current = time;
       }
@@ -466,7 +670,14 @@ export default function GameCanvas({
       bullets.current = bullets.current.filter(b => b.y > -20 && b.x > -20 && b.x < GAME_WIDTH + 20);
 
       // Update Enemies
-      enemies.current.forEach(e => e.update());
+      enemies.current.forEach(e => {
+        e.update();
+        // Shooter enemy shooting logic
+        if (e.type === EnemyType.SHOOTER && time - e.lastShotTime > 1000) {
+          bullets.current.push(new Bullet(e.x, e.y + e.size / 2, 0, 15, '#ef4444', 1, true));
+          e.lastShotTime = time;
+        }
+      });
       enemies.current = enemies.current.filter(e => {
         if (e.y > GAME_HEIGHT) {
           statsRef.current.score = Math.max(0, statsRef.current.score - 50);
@@ -486,12 +697,14 @@ export default function GameCanvas({
 
       // Collision Detection: Bullets vs Enemies
       bullets.current.forEach((b, bIdx) => {
+        if (b.isEnemy) return; // Player bullets only
         enemies.current.forEach((e, eIdx) => {
           const dist = Math.hypot(b.x - e.x, b.y - e.y);
           if (dist < e.size / 2 + BULLET_SIZE) {
-            e.health -= 1;
+            e.health -= b.damage;
             bullets.current.splice(bIdx, 1);
             if (e.health <= 0) {
+              playSound('explosionSound');
               createExplosion(e.x, e.y, e.color);
               statsRef.current.score += ENEMY_CONFIGS[e.type].score;
               statsRef.current.enemiesKilled += 1;
@@ -503,6 +716,22 @@ export default function GameCanvas({
           }
         });
       });
+
+      // Collision Detection: Player vs Enemy Bullets
+      if (!isInvincible.current) {
+        bullets.current.forEach((b, bIdx) => {
+          if (!b.isEnemy) return;
+          const dist = Math.hypot(playerPos.current.x - b.x, playerPos.current.y - b.y);
+          if (dist < PLAYER_SIZE / 2 + BULLET_SIZE) {
+            if (hasShield.current) {
+              hasShield.current = false;
+            } else {
+              takeDamage();
+            }
+            bullets.current.splice(bIdx, 1);
+          }
+        });
+      }
 
       // Collision Detection: Player vs Enemies
       if (!isInvincible.current) {
@@ -531,8 +760,12 @@ export default function GameCanvas({
             tripleShotUntil.current = time + POWERUP_DURATION;
           } else if (item.type === ItemType.SHIELD) {
             hasShield.current = true;
+          } else if (item.type === ItemType.MEDKIT) {
+            playerHealth.current = Math.min(playerHealth.current + 1, maxHealth.current);
           }
           items.current.splice(idx, 1);
+          statsRef.current.currentHealth = playerHealth.current;
+          statsRef.current.maxHealth = maxHealth.current;
           checkAchievements();
           onStatsUpdate({ ...statsRef.current });
         }
@@ -543,8 +776,15 @@ export default function GameCanvas({
       ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
       // Background
-      ctx.fillStyle = '#020617';
+      const gradient = ctx.createRadialGradient(
+        GAME_WIDTH / 2, GAME_HEIGHT / 2, 0,
+        GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_HEIGHT
+      );
+      gradient.addColorStop(0, '#0f172a');
+      gradient.addColorStop(1, '#020617');
+      ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+      
       stars.current.forEach(s => s.draw(ctx));
 
       // Entities
@@ -552,7 +792,7 @@ export default function GameCanvas({
       enemies.current.forEach(e => {
         let imgKey = 'enemyBasic';
         if (e.type === EnemyType.FAST) imgKey = 'enemyFast';
-        if (e.type === EnemyType.HEAVY) imgKey = 'enemyHeavy';
+        if (e.type === EnemyType.HEAVY || e.type === EnemyType.SHOOTER) imgKey = 'enemyHeavy';
         e.draw(ctx, images.current[imgKey]);
       });
       items.current.forEach(i => i.draw(ctx));
@@ -565,9 +805,23 @@ export default function GameCanvas({
     const drawPlayer = (ctx: CanvasRenderingContext2D) => {
       const { x, y } = playerPos.current;
       
-      if (isInvincible.current && Math.floor(Date.now() / 100) % 2 === 0) return;
-
       ctx.save();
+
+      // Draw health bar below player
+      const barWidth = PLAYER_SIZE;
+      const barHeight = 4;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(x - barWidth / 2, y + PLAYER_SIZE / 2 + 10, barWidth, barHeight);
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(x - barWidth / 2, y + PLAYER_SIZE / 2 + 10, barWidth * (playerHealth.current / maxHealth.current), barHeight);
+
+      if (isInvincible.current) {
+        // Pulsing transparency and glow when invincible
+        const pulse = Math.sin(Date.now() / 50) * 0.5 + 0.5;
+        ctx.globalAlpha = 0.4 + pulse * 0.6;
+        ctx.shadowBlur = 15 + pulse * 15;
+        ctx.shadowColor = '#00f2ff';
+      }
       
       // Shield
       if (hasShield.current) {
@@ -630,6 +884,7 @@ export default function GameCanvas({
     const takeDamage = () => {
       playerHealth.current -= 1;
       statsRef.current.damageTaken += 1;
+      statsRef.current.currentHealth = playerHealth.current;
       onStatsUpdate({ ...statsRef.current });
       
       if (playerHealth.current <= 0) {
@@ -643,12 +898,20 @@ export default function GameCanvas({
     };
 
     const checkLevelUp = () => {
-      const nextLevel = Math.floor(statsRef.current.score / 2000) + 1;
-      if (nextLevel > statsRef.current.level) {
-        statsRef.current.level = nextLevel;
-        onLevelUp(nextLevel);
+      // Level threshold scales: 
+      // Level 2: 2000
+      // Level 3: 5000 (2000 + 3000)
+      // Level 4: 9000 (5000 + 4000)
+      // Formula for total score to reach level L: 500*L^2 + 500*L - 1000
+      const currentLevel = statsRef.current.level;
+      const nextLevelThreshold = 500 * Math.pow(currentLevel + 1, 2) + 500 * (currentLevel + 1) - 1000;
+      
+      if (statsRef.current.score >= nextLevelThreshold) {
+        statsRef.current.level += 1;
+        onLevelUp(statsRef.current.level);
         // Clear screen
         enemies.current = [];
+        bullets.current = [];
       }
     };
 

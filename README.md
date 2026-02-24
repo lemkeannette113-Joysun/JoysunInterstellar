@@ -37,11 +37,14 @@ npm run dev
 
 ## 🎨 自定义资源
 
-你可以通过替换 `public/assets/` 目录下的图片来更改游戏外观：
+你可以通过替换 `public/assets/` 目录下的文件来更改游戏外观和音效：
 - `player.png`: 主角战机
 - `enemy_basic.png`: 基础敌机
 - `enemy_fast.png`: 快速敌机
 - `enemy_heavy.png`: 重型敌机
+- `shoot.mp3`: 开火音效
+- `explosion.mp3`: 爆炸音效
+- `background_music.mp3`: 背景音乐 (循环播放)
 
 ## 🛠 技术栈
 - **React 19**: UI 框架
