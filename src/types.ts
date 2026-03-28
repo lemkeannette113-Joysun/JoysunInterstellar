@@ -16,6 +16,7 @@ export enum UpgradeType {
   DAMAGE = 'DAMAGE',
   DEFENSE = 'DEFENSE',
   MOVE_SPEED = 'MOVE_SPEED',
+  WINGMAN = 'WINGMAN',
 }
 
 export enum EnemyType {
@@ -23,12 +24,16 @@ export enum EnemyType {
   FAST = 'FAST',
   HEAVY = 'HEAVY',
   SHOOTER = 'SHOOTER',
+  BOSS = 'BOSS',
+  WAVER = 'WAVER',
+  DIVER = 'DIVER',
 }
 
 export enum ItemType {
   TRIPLE_SHOT = 'TRIPLE_SHOT',
   SHIELD = 'SHIELD',
   MEDKIT = 'MEDKIT',
+  WINGMAN = 'WINGMAN',
 }
 
 export interface Achievement {

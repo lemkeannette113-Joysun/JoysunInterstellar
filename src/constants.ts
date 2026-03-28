@@ -3,7 +3,7 @@ export const GAME_HEIGHT = 900;
 
 export const PLAYER_SPEED = 7;
 export const PLAYER_SIZE = 40;
-export const PLAYER_INITIAL_HEALTH = 3;
+export const PLAYER_INITIAL_HEALTH = 5;
 
 export const BULLET_SPEED = 10;
 export const BULLET_SIZE = 4;
@@ -36,6 +36,27 @@ export const ENEMY_CONFIGS = {
     score: 500,
     size: 40,
     color: '#f87171', // red-400
+  },
+  BOSS: {
+    speed: 1,
+    health: 100,
+    score: 5000,
+    size: 120,
+    color: '#a855f7', // purple-500
+  },
+  WAVER: {
+    speed: 1.5,
+    health: 3,
+    score: 250,
+    size: 35,
+    color: '#10b981', // emerald-500
+  },
+  DIVER: {
+    speed: 2,
+    health: 2,
+    score: 400,
+    size: 30,
+    color: '#f97316', // orange-500
   },
 };
 

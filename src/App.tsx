@@ -147,6 +147,15 @@ export default function App() {
                 <p className="text-xs text-slate-400">抵挡一次敌机撞击</p>
               </div>
             </div>
+            <div className="flex gap-4 p-3 rounded-xl bg-white/5 border border-white/10">
+              <div className="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400">
+                <Gamepad2 size={20} />
+              </div>
+              <div>
+                <p className="text-sm font-bold">己方僚机</p>
+                <p className="text-xs text-slate-400">自动射击的僚机协助作战</p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -270,17 +279,17 @@ export default function App() {
                     </button>
 
                     <button 
-                      onClick={() => handleUpgradeSelect(UpgradeType.MOVE_SPEED)}
-                      className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-amber-500/10 hover:border-amber-500/50 transition-all group text-left"
+                      onClick={() => handleUpgradeSelect(UpgradeType.WINGMAN)}
+                      className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-indigo-500/10 hover:border-indigo-500/50 transition-all group text-left"
                     >
-                      <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
-                        <Wind size={24} />
+                      <div className="w-12 h-12 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 group-hover:scale-110 transition-transform">
+                        <Gamepad2 size={24} />
                       </div>
                       <div className="flex-1">
-                        <p className="font-bold text-white">提升航行速度</p>
-                        <p className="text-xs text-slate-400">增加飞机的移动速度，更灵活地躲避攻击</p>
+                        <p className="font-bold text-white">召唤僚机</p>
+                        <p className="text-xs text-slate-400">增加一架自动射击的僚机协助作战</p>
                       </div>
-                      <ChevronRight size={20} className="text-slate-600 group-hover:text-amber-400" />
+                      <ChevronRight size={20} className="text-slate-600 group-hover:text-indigo-400" />
                     </button>
                   </div>
                 </div>

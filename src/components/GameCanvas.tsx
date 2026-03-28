@@ -28,9 +28,6 @@ const ASSETS = {
   enemyBasic: '/assets/enemy_basic.png',
   enemyFast: '/assets/enemy_fast.png',
   enemyHeavy: '/assets/enemy_heavy.png',
-  shootSound: '/assets/shoot.mp3',
-  explosionSound: '/assets/explosion.mp3',
-  bgMusic: '/assets/background_music.mp3',
 };
 
 class Particle {
@@ -46,18 +43,20 @@ class Particle {
     this.x = x;
     this.y = y;
     const angle = Math.random() * Math.PI * 2;
-    const speed = Math.random() * 3 + 1;
+    const speed = Math.random() * 8 + 2; // Increased speed for more exaggeration
     this.vx = Math.cos(angle) * speed;
     this.vy = Math.sin(angle) * speed;
     this.life = 1.0;
     this.color = color;
-    this.size = Math.random() * 3 + 1;
+    this.size = Math.random() * 5 + 1; // Slightly larger particles
   }
 
   update() {
     this.x += this.vx;
     this.y += this.vy;
-    this.life -= 0.02;
+    this.vx *= 0.96; // Add some friction
+    this.vy *= 0.96;
+    this.life -= 0.025; // Fade a bit faster
   }
 
   draw(ctx: CanvasRenderingContext2D) {
@@ -131,15 +130,62 @@ class Enemy {
     this.color = config.color;
   }
 
-  update() {
-    this.y += this.speed;
+  update(time: number) {
+    if (this.type === EnemyType.BOSS) {
+      if (this.y < 150) {
+        this.y += this.speed;
+      } else {
+        this.x += Math.sin(time / 500) * 3;
+      }
+    } else if (this.type === EnemyType.WAVER) {
+      this.y += this.speed;
+      this.x += Math.sin(time / 300) * 4;
+    } else if (this.type === EnemyType.DIVER) {
+      if (this.y < 200) {
+        this.y += this.speed;
+      } else {
+        this.y += this.speed * 3; // Dive speed
+      }
+    } else {
+      this.y += this.speed;
+    }
+  }
+
+  shoot(time: number, bullets: Bullet[], playerX: number, playerY: number) {
+    if (this.type === EnemyType.SHOOTER && time - this.lastShotTime > 1000) {
+      bullets.push(new Bullet(this.x, this.y + this.size / 2, 0, 15, '#ef4444', 1, true));
+      this.lastShotTime = time;
+    } else if (this.type === EnemyType.BOSS && time - this.lastShotTime > 1200) {
+      const pattern = Math.floor(time / 4000) % 3;
+      if (pattern === 0) {
+        // Circular burst
+        for (let i = 0; i < 12; i++) {
+          const angle = (i / 12) * Math.PI * 2;
+          bullets.push(new Bullet(this.x, this.y, Math.cos(angle) * 6, Math.sin(angle) * 6, '#a855f7', 1, true));
+        }
+      } else if (pattern === 1) {
+        // Targeted spread
+        const dx = playerX - this.x;
+        const dy = playerY - this.y;
+        const angle = Math.atan2(dy, dx);
+        for (let i = -2; i <= 2; i++) {
+          const a = angle + (i * 0.2);
+          bullets.push(new Bullet(this.x, this.y, Math.cos(a) * 8, Math.sin(a) * 8, '#a855f7', 1, true));
+        }
+      } else {
+        // Rapid fire
+        bullets.push(new Bullet(this.x - 20, this.y + 30, 0, 10, '#a855f7', 1, true));
+        bullets.push(new Bullet(this.x + 20, this.y + 30, 0, 10, '#a855f7', 1, true));
+      }
+      this.lastShotTime = time;
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D, image?: HTMLImageElement | null) {
     ctx.save();
     
-    // Draw health bar for enemies with more than 1 HP
-    if (this.maxHealth > 1) {
+    // Draw health bar for enemies with more than 1 HP (except Boss, which has a global bar)
+    if (this.maxHealth > 1 && this.type !== EnemyType.BOSS) {
       const barWidth = this.size;
       const barHeight = 4;
       const healthPercent = this.health / this.maxHealth;
@@ -155,7 +201,66 @@ class Enemy {
       ctx.fillRect(this.x - barWidth / 2, this.y - this.size / 2 - 10, barWidth * healthPercent, barHeight);
     }
     
-    if (image && image.complete && image.naturalWidth !== 0) {
+    if (this.type === EnemyType.BOSS) {
+      // Boss specific drawing
+      ctx.shadowBlur = 30;
+      ctx.shadowColor = this.color;
+      ctx.fillStyle = this.color;
+      
+      // Main body
+      ctx.beginPath();
+      ctx.ellipse(this.x, this.y, this.size / 2, this.size / 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Wings/Engines
+      ctx.fillStyle = '#7c3aed'; // darker purple
+      ctx.fillRect(this.x - this.size / 2 - 20, this.y - 10, 30, 40);
+      ctx.fillRect(this.x + this.size / 2 - 10, this.y - 10, 30, 40);
+      
+      // Glowing core
+      const pulse = Math.sin(Date.now() / 200) * 0.5 + 0.5;
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + pulse * 0.5})`;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size / 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.type === EnemyType.WAVER) {
+      // Wavy ship design
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = this.color;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y - this.size / 2);
+      ctx.bezierCurveTo(this.x + this.size, this.y, this.x - this.size, this.y, this.x, this.y + this.size / 2);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = this.color;
+      ctx.stroke();
+      
+      // Core
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size / 4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (this.type === EnemyType.DIVER) {
+      // Sharp diver design
+      ctx.shadowBlur = 15;
+      ctx.shadowColor = this.color;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.moveTo(this.x, this.y + this.size / 2);
+      ctx.lineTo(this.x - this.size / 3, this.y - this.size / 2);
+      ctx.lineTo(this.x + this.size / 3, this.y - this.size / 2);
+      ctx.closePath();
+      ctx.fill();
+      
+      // Thruster
+      const thrust = Math.random() * 10;
+      ctx.fillStyle = '#ffedd5';
+      ctx.beginPath();
+      ctx.moveTo(this.x - 5, this.y - this.size / 2);
+      ctx.lineTo(this.x, this.y - this.size / 2 - thrust);
+      ctx.lineTo(this.x + 5, this.y - this.size / 2);
+      ctx.fill();
+    } else if (image && image.complete && image.naturalWidth !== 0) {
       // Draw image if available
       ctx.drawImage(
         image, 
@@ -181,23 +286,6 @@ class Enemy {
       ctx.beginPath();
       ctx.arc(this.x, this.y - 2, this.size / 4, 0, Math.PI * 2);
       ctx.fill();
-    }
-    
-    // Health bar for tougher enemies
-    if (this.maxHealth > 1) {
-      const barWidth = this.size;
-      const barHeight = 4;
-      const healthPercent = this.health / this.maxHealth;
-      
-      ctx.fillStyle = 'rgba(0,0,0,0.5)';
-      ctx.fillRect(this.x - barWidth / 2, this.y - this.size / 2 - 10, barWidth, barHeight);
-      
-      // Color based on health percentage
-      if (healthPercent > 0.6) ctx.fillStyle = '#22c55e'; // green
-      else if (healthPercent > 0.3) ctx.fillStyle = '#f59e0b'; // amber
-      else ctx.fillStyle = '#ef4444'; // red
-      
-      ctx.fillRect(this.x - barWidth / 2, this.y - this.size / 2 - 10, barWidth * healthPercent, barHeight);
     }
     
     ctx.restore();
@@ -227,6 +315,7 @@ class Item {
     if (this.type === ItemType.TRIPLE_SHOT) color = '#facc15';
     if (this.type === ItemType.SHIELD) color = '#22c55e';
     if (this.type === ItemType.MEDKIT) color = '#ef4444';
+    if (this.type === ItemType.WINGMAN) color = '#818cf8';
 
     ctx.shadowBlur = 15;
     ctx.shadowColor = color;
@@ -249,6 +338,7 @@ class Item {
     if (this.type === ItemType.TRIPLE_SHOT) text = '3';
     if (this.type === ItemType.SHIELD) text = 'S';
     if (this.type === ItemType.MEDKIT) text = 'H';
+    if (this.type === ItemType.WINGMAN) text = 'W';
     ctx.fillText(text, this.x, this.y + 4);
     
     ctx.restore();
@@ -330,6 +420,7 @@ export default function GameCanvas({
   
   const achievementsRef = useRef<Achievement[]>(ACHIEVEMENTS_LIST.map(a => ({ ...a })));
   const playerPos = useRef({ x: GAME_WIDTH / 2, y: GAME_HEIGHT - 100 });
+  const wingmenCount = useRef(0);
   const playerHealth = useRef(PLAYER_INITIAL_HEALTH);
   const maxHealth = useRef(PLAYER_INITIAL_HEALTH);
   const isInvincible = useRef(false);
@@ -356,6 +447,7 @@ export default function GameCanvas({
   const lastEnemySpawn = useRef(0);
   const lastItemSpawn = useRef(0);
   const lastTimeTick = useRef(0);
+  const isBossActive = useRef(false);
 
   useEffect(() => {
     if (appliedUpgrade) {
@@ -378,7 +470,6 @@ export default function GameCanvas({
   // Asset Loading
   const [assetsLoaded, setAssetsLoaded] = useState(false);
   const images = useRef<{ [key: string]: HTMLImageElement }>({});
-  const sounds = useRef<{ [key: string]: HTMLAudioElement }>({});
 
   useEffect(() => {
     let loadedCount = 0;
@@ -401,78 +492,9 @@ export default function GameCanvas({
         };
         img.src = src;
         images.current[key] = img;
-      } else if (src.endsWith('.mp3')) {
-        const audio = new Audio();
-        const onAudioLoad = () => {
-          audio.removeEventListener('canplay', onAudioLoad);
-          audio.removeEventListener('canplaythrough', onAudioLoad);
-          checkLoaded();
-        };
-        audio.addEventListener('canplay', onAudioLoad);
-        audio.addEventListener('canplaythrough', onAudioLoad);
-        audio.onerror = () => {
-          console.warn(`Failed to load audio: ${src}`);
-          onAudioLoad();
-        };
-        audio.preload = 'auto';
-        audio.src = src;
-        if (key === 'bgMusic') {
-          audio.loop = true;
-          audio.volume = 0.4; // Increased volume slightly
-        }
-        audio.load();
-        sounds.current[key] = audio;
       }
     });
   }, []);
-
-  // Manage background music
-  useEffect(() => {
-    if (!assetsLoaded) return;
-    const music = sounds.current['bgMusic'];
-    if (!music) return;
-
-    const playMusic = () => {
-      if (gameState === GameState.PLAYING) {
-        music.play().catch(() => {
-          // Autoplay block - will retry on next interaction
-        });
-      } else {
-        music.pause();
-        music.currentTime = 0;
-      }
-    };
-
-    playMusic();
-
-    // Add global interaction listener to ensure music plays
-    const handleInteraction = () => {
-      if (gameState === GameState.PLAYING && music.paused) {
-        music.play().catch(() => {});
-      }
-    };
-
-    window.addEventListener('mousedown', handleInteraction);
-    window.addEventListener('keydown', handleInteraction);
-    window.addEventListener('touchstart', handleInteraction);
-
-    return () => {
-      window.removeEventListener('mousedown', handleInteraction);
-      window.removeEventListener('keydown', handleInteraction);
-      window.removeEventListener('touchstart', handleInteraction);
-    };
-  }, [gameState, assetsLoaded]);
-
-  const playSound = (key: string) => {
-    const sound = sounds.current[key];
-    if (sound) {
-      const clone = sound.cloneNode() as HTMLAudioElement;
-      clone.volume = 0.3;
-      clone.play().catch(() => {
-        // Ignore errors if audio can't play (e.g. user hasn't interacted yet)
-      });
-    }
-  };
 
   // Reset game when transitioning to PLAYING from START
   const prevGameState = useRef<GameState>(gameState);
@@ -610,13 +632,8 @@ export default function GameCanvas({
 
       // Pointer Movement
       if (isPointerDown.current) {
-        const dx = pointerPos.current.x - playerPos.current.x;
-        const dy = pointerPos.current.y - playerPos.current.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist > 5) {
-          playerPos.current.x += (dx / dist) * currentSpeed;
-          playerPos.current.y += (dy / dist) * currentSpeed;
-        }
+        playerPos.current.x = pointerPos.current.x;
+        playerPos.current.y = pointerPos.current.y;
       }
 
       // Bound Player
@@ -627,9 +644,10 @@ export default function GameCanvas({
       const shouldShoot = keysPressed.current.has('Space') || isPointerDown.current;
       const shotInterval = Math.max(80, 150 - upgradeStats.current.fireRateBonus);
       if (shouldShoot && time - lastShotTime.current > shotInterval) {
-        playSound('shootSound');
         const isTriple = time < tripleShotUntil.current;
         const damage = 1 + upgradeStats.current.damageBonus;
+        
+        // Main ship shooting
         if (isTriple) {
           bullets.current.push(new Bullet(playerPos.current.x, playerPos.current.y - 20, 0, -BULLET_SPEED, '#00f2ff', damage));
           bullets.current.push(new Bullet(playerPos.current.x - 10, playerPos.current.y - 15, -2, -BULLET_SPEED, '#00f2ff', damage));
@@ -637,26 +655,48 @@ export default function GameCanvas({
         } else {
           bullets.current.push(new Bullet(playerPos.current.x, playerPos.current.y - 20, 0, -BULLET_SPEED, '#00f2ff', damage));
         }
+
+        // Wingmen shooting
+        if (wingmenCount.current >= 1) {
+          bullets.current.push(new Bullet(playerPos.current.x - 40, playerPos.current.y + 10, 0, -BULLET_SPEED, '#00f2ff', damage * 0.5));
+        }
+        if (wingmenCount.current >= 2) {
+          bullets.current.push(new Bullet(playerPos.current.x + 40, playerPos.current.y + 10, 0, -BULLET_SPEED, '#00f2ff', damage * 0.5));
+        }
+
         lastShotTime.current = time;
       }
 
       // Spawning Enemies
+      const isBossLevel = statsRef.current.level % 5 === 0;
       const spawnInterval = Math.max(500, 1500 - statsRef.current.level * 100);
-      if (time - lastEnemySpawn.current > spawnInterval) {
-        const types = [EnemyType.BASIC, EnemyType.BASIC, EnemyType.FAST];
-        if (statsRef.current.level >= 3) types.push(EnemyType.HEAVY);
-        if (statsRef.current.level >= 5) types.push(EnemyType.SHOOTER);
-        const type = types[Math.floor(Math.random() * types.length)];
-        enemies.current.push(new Enemy(Math.random() * (GAME_WIDTH - 40) + 20, -50, type, statsRef.current.level));
+      
+      if (!isBossActive.current && time - lastEnemySpawn.current > spawnInterval) {
+        if (isBossLevel) {
+          // Spawn Boss
+          enemies.current.push(new Enemy(GAME_WIDTH / 2, -100, EnemyType.BOSS, statsRef.current.level));
+          isBossActive.current = true;
+        } else {
+          const types = [EnemyType.BASIC, EnemyType.BASIC, EnemyType.FAST];
+          if (statsRef.current.level >= 2) types.push(EnemyType.WAVER);
+          if (statsRef.current.level >= 3) types.push(EnemyType.HEAVY);
+          if (statsRef.current.level >= 4) types.push(EnemyType.DIVER);
+          if (statsRef.current.level >= 5) types.push(EnemyType.SHOOTER);
+          
+          const type = types[Math.floor(Math.random() * types.length)];
+          enemies.current.push(new Enemy(Math.random() * (GAME_WIDTH - 40) + 20, -50, type, statsRef.current.level));
+        }
         lastEnemySpawn.current = time;
       }
 
       // Spawning Items
-      if (time - lastItemSpawn.current > 15000) {
+      const itemSpawnInterval = isBossActive.current ? 8000 : 15000;
+      if (time - lastItemSpawn.current > itemSpawnInterval) {
         const rand = Math.random();
         let type = ItemType.TRIPLE_SHOT;
-        if (rand > 0.66) type = ItemType.SHIELD;
-        else if (rand > 0.33) type = ItemType.MEDKIT;
+        if (rand > 0.75) type = ItemType.SHIELD;
+        else if (rand > 0.5) type = ItemType.MEDKIT;
+        else if (rand > 0.25) type = ItemType.WINGMAN;
         
         items.current.push(new Item(Math.random() * (GAME_WIDTH - 40) + 20, -50, type));
         lastItemSpawn.current = time;
@@ -667,20 +707,16 @@ export default function GameCanvas({
 
       // Update Bullets
       bullets.current.forEach(b => b.update());
-      bullets.current = bullets.current.filter(b => b.y > -20 && b.x > -20 && b.x < GAME_WIDTH + 20);
+      bullets.current = bullets.current.filter(b => b.y > -20 && b.x > -20 && b.x < GAME_WIDTH + 20 && b.y < GAME_HEIGHT + 20);
 
       // Update Enemies
       enemies.current.forEach(e => {
-        e.update();
-        // Shooter enemy shooting logic
-        if (e.type === EnemyType.SHOOTER && time - e.lastShotTime > 1000) {
-          bullets.current.push(new Bullet(e.x, e.y + e.size / 2, 0, 15, '#ef4444', 1, true));
-          e.lastShotTime = time;
-        }
+        e.update(time);
+        e.shoot(time, bullets.current, playerPos.current.x, playerPos.current.y);
       });
       enemies.current = enemies.current.filter(e => {
-        if (e.y > GAME_HEIGHT) {
-          statsRef.current.score = Math.max(0, statsRef.current.score - 50);
+        if (e.y > GAME_HEIGHT && e.type !== EnemyType.BOSS) {
+          statsRef.current.score = Math.max(0, statsRef.current.score - 20); // Reduced penalty
           onStatsUpdate({ ...statsRef.current });
           return false;
         }
@@ -704,10 +740,12 @@ export default function GameCanvas({
             e.health -= b.damage;
             bullets.current.splice(bIdx, 1);
             if (e.health <= 0) {
-              playSound('explosionSound');
               createExplosion(e.x, e.y, e.color);
               statsRef.current.score += ENEMY_CONFIGS[e.type].score;
               statsRef.current.enemiesKilled += 1;
+              if (e.type === EnemyType.BOSS) {
+                isBossActive.current = false;
+              }
               enemies.current.splice(eIdx, 1);
               checkLevelUp();
               checkAchievements();
@@ -741,10 +779,16 @@ export default function GameCanvas({
             if (hasShield.current) {
               hasShield.current = false;
               createExplosion(e.x, e.y, e.color);
+              if (e.type === EnemyType.BOSS) {
+                isBossActive.current = false;
+              }
               enemies.current.splice(eIdx, 1);
             } else {
               takeDamage();
               createExplosion(e.x, e.y, e.color);
+              if (e.type === EnemyType.BOSS) {
+                isBossActive.current = false;
+              }
               enemies.current.splice(eIdx, 1);
             }
           }
@@ -762,6 +806,8 @@ export default function GameCanvas({
             hasShield.current = true;
           } else if (item.type === ItemType.MEDKIT) {
             playerHealth.current = Math.min(playerHealth.current + 1, maxHealth.current);
+          } else if (item.type === ItemType.WINGMAN) {
+            wingmenCount.current = Math.min(wingmenCount.current + 1, 2);
           }
           items.current.splice(idx, 1);
           statsRef.current.currentHealth = playerHealth.current;
@@ -800,12 +846,61 @@ export default function GameCanvas({
 
       // Player
       drawPlayer(ctx);
+
+      // Boss Health Bar
+      if (isBossActive.current) {
+        const boss = enemies.current.find(e => e.type === EnemyType.BOSS);
+        if (boss) {
+          const barWidth = GAME_WIDTH * 0.8;
+          const barHeight = 10;
+          const x = (GAME_WIDTH - barWidth) / 2;
+          const y = 40;
+          
+          ctx.fillStyle = 'rgba(0,0,0,0.5)';
+          ctx.fillRect(x, y, barWidth, barHeight);
+          
+          const healthPercent = boss.health / boss.maxHealth;
+          ctx.fillStyle = '#a855f7';
+          ctx.fillRect(x, y, barWidth * healthPercent, barHeight);
+          
+          ctx.fillStyle = 'white';
+          ctx.font = 'bold 16px Inter';
+          ctx.textAlign = 'center';
+          ctx.fillText('BOSS', GAME_WIDTH / 2, y - 10);
+        }
+      }
     };
 
     const drawPlayer = (ctx: CanvasRenderingContext2D) => {
       const { x, y } = playerPos.current;
       
       ctx.save();
+
+      // Draw wingmen
+      for (let i = 0; i < wingmenCount.current; i++) {
+        const wx = i === 0 ? x - 40 : x + 40;
+        const wy = y + 10;
+        
+        ctx.save();
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#818cf8';
+        ctx.fillStyle = '#818cf8';
+        ctx.beginPath();
+        ctx.moveTo(wx, wy - 10);
+        ctx.lineTo(wx - 8, wy + 8);
+        ctx.lineTo(wx + 8, wy + 8);
+        ctx.closePath();
+        ctx.fill();
+        
+        // Wingman engine
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.moveTo(wx - 3, wy + 8);
+        ctx.lineTo(wx + 3, wy + 8);
+        ctx.lineTo(wx, wy + 14);
+        ctx.fill();
+        ctx.restore();
+      }
 
       // Draw health bar below player
       const barWidth = PLAYER_SIZE;
@@ -844,31 +939,58 @@ export default function GameCanvas({
           PLAYER_SIZE
         );
       } else {
-        // Body
+        // Optimized Vector Ship Design
         ctx.shadowBlur = 20;
         ctx.shadowColor = '#00f2ff';
+        
+        // Main Body (more complex)
         ctx.fillStyle = '#00f2ff';
         ctx.beginPath();
-        ctx.moveTo(x, y - PLAYER_SIZE / 2);
-        ctx.lineTo(x - PLAYER_SIZE / 2, y + PLAYER_SIZE / 2);
-        ctx.lineTo(x + PLAYER_SIZE / 2, y + PLAYER_SIZE / 2);
+        ctx.moveTo(x, y - PLAYER_SIZE / 2); // Nose
+        ctx.lineTo(x - PLAYER_SIZE / 2, y + PLAYER_SIZE / 4); // Left wing tip
+        ctx.lineTo(x - PLAYER_SIZE / 4, y + PLAYER_SIZE / 2); // Left engine
+        ctx.lineTo(x + PLAYER_SIZE / 4, y + PLAYER_SIZE / 2); // Right engine
+        ctx.lineTo(x + PLAYER_SIZE / 2, y + PLAYER_SIZE / 4); // Right wing tip
         ctx.closePath();
         ctx.fill();
 
-        // Cockpit
-        ctx.fillStyle = '#ffffff';
+        // Wings detail
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.arc(x, y + 5, PLAYER_SIZE / 6, 0, Math.PI * 2);
+        ctx.moveTo(x - PLAYER_SIZE / 4, y);
+        ctx.lineTo(x - PLAYER_SIZE / 2, y + PLAYER_SIZE / 4);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x + PLAYER_SIZE / 4, y);
+        ctx.lineTo(x + PLAYER_SIZE / 2, y + PLAYER_SIZE / 4);
+        ctx.stroke();
+
+        // Cockpit (Glassy look)
+        const cockpitGradient = ctx.createLinearGradient(x, y - 5, x, y + 10);
+        cockpitGradient.addColorStop(0, '#ffffff');
+        cockpitGradient.addColorStop(1, '#94a3b8');
+        ctx.fillStyle = cockpitGradient;
+        ctx.beginPath();
+        ctx.ellipse(x, y + 2, PLAYER_SIZE / 6, PLAYER_SIZE / 4, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Engine Flame
-        const flameHeight = Math.random() * 10 + 10;
+        // Engine Flames (Dual)
+        const flamePulse = Math.sin(Date.now() / 50) * 5;
         ctx.fillStyle = '#f59e0b';
+        
+        // Left Engine
         ctx.beginPath();
-        ctx.moveTo(x - 5, y + PLAYER_SIZE / 2);
-        ctx.lineTo(x + 5, y + PLAYER_SIZE / 2);
-        ctx.lineTo(x, y + PLAYER_SIZE / 2 + flameHeight);
-        ctx.closePath();
+        ctx.moveTo(x - 12, y + PLAYER_SIZE / 2);
+        ctx.lineTo(x - 4, y + PLAYER_SIZE / 2);
+        ctx.lineTo(x - 8, y + PLAYER_SIZE / 2 + 10 + flamePulse);
+        ctx.fill();
+        
+        // Right Engine
+        ctx.beginPath();
+        ctx.moveTo(x + 4, y + PLAYER_SIZE / 2);
+        ctx.lineTo(x + 12, y + PLAYER_SIZE / 2);
+        ctx.lineTo(x + 8, y + PLAYER_SIZE / 2 + 10 + flamePulse);
         ctx.fill();
       }
 
@@ -876,8 +998,16 @@ export default function GameCanvas({
     };
 
     const createExplosion = (x: number, y: number, color: string) => {
-      for (let i = 0; i < 20; i++) {
+      // More particles for a bigger explosion
+      const count = 50;
+      for (let i = 0; i < count; i++) {
         particles.current.push(new Particle(x, y, color));
+      }
+      // Add some white "flash" particles
+      for (let i = 0; i < 20; i++) {
+        const p = new Particle(x, y, '#ffffff');
+        p.size *= 1.5;
+        particles.current.push(p);
       }
     };
 
@@ -898,11 +1028,9 @@ export default function GameCanvas({
     };
 
     const checkLevelUp = () => {
-      // Level threshold scales: 
-      // Level 2: 2000
-      // Level 3: 5000 (2000 + 3000)
-      // Level 4: 9000 (5000 + 4000)
-      // Formula for total score to reach level L: 500*L^2 + 500*L - 1000
+      // If boss is active, don't level up until it's dead
+      if (isBossActive.current) return;
+
       const currentLevel = statsRef.current.level;
       const nextLevelThreshold = 500 * Math.pow(currentLevel + 1, 2) + 500 * (currentLevel + 1) - 1000;
       
